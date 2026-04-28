@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Almanaque Interactivo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          boxShadow: {
+            soft: "0 10px 30px -12px rgba(0,0,0,0.35)"
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+  <main class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+    <section class="rounded-3xl border border-slate-800/80 bg-slate-900/80 p-5 shadow-soft backdrop-blur sm:p-7">
+      <header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p class="text-sm uppercase tracking-widest text-indigo-300">Almanaque</p>
+          <h1 class="text-2xl font-semibold sm:text-3xl" id="monthYear"></h1>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="prevMonth" class="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium transition hover:border-indigo-400 hover:text-indigo-200">
+            Mes anterior
+          </button>
+          <button id="todayBtn" class="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400">
+            Hoy
+          </button>
+          <button id="nextMonth" class="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium transition hover:border-indigo-400 hover:text-indigo-200">
+            Mes siguiente
+          </button>
+        </div>
+      </header>
+
+      <div class="lg:grid lg:grid-cols-12 lg:gap-6">
+        <div class="lg:col-span-8">
+          <div class="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">
+            <span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span>
+          </div>
+
+          <div id="calendarGrid" class="mt-3 grid grid-cols-7 gap-2"></div>
+
+          <aside class="mt-6 rounded-2xl border border-slate-800 bg-slate-900/90 p-4 sm:p-5">
+            <p class="text-xs uppercase tracking-widest text-slate-400">Fecha seleccionada</p>
+            <h2 id="selectedDateTitle" class="mt-1 text-lg font-semibold text-indigo-200"></h2>
+            <p id="selectedDateInfo" class="mt-2 text-sm text-slate-300"></p>
+          </aside>
+        </div>
+
+        <aside class="mt-6 rounded-2xl border border-slate-800 bg-slate-900/90 p-4 sm:p-5 lg:col-span-4 lg:mt-0">
+          <p class="text-xs uppercase tracking-widest text-slate-400">Agenda del mes</p>
+          <h3 class="mt-1 text-lg font-semibold text-indigo-200">Notas rápidas</h3>
+          <div id="agendaList" class="mt-4 space-y-2"></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <div id="noteModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 px-4">
+    <div class="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-soft">
+      <h3 class="text-lg font-semibold text-indigo-200">Nota rápida</h3>
+      <p id="noteModalDate" class="mt-1 text-sm text-slate-300"></p>
+
+      <textarea
+        id="noteInput"
+        rows="4"
+        maxlength="1000"
+        class="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-indigo-400"
+        placeholder="Escribe una nota para este día..."
+      ></textarea>
+
+      <p id="noteFeedback" class="mt-2 min-h-5 text-xs text-slate-400"></p>
+
+      <div class="mt-4 flex items-center justify-between gap-2">
+        <button id="deleteNoteBtn" class="inline-flex items-center gap-2 rounded-xl border border-rose-700/70 bg-rose-950/30 px-3 py-2 text-sm text-rose-200 transition hover:border-rose-500 hover:bg-rose-900/40">
+          <span aria-hidden="true">🗑</span>
+          Borrar
+        </button>
+        <div class="flex items-center gap-2">
+        <button id="closeNoteModal" class="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm transition hover:border-slate-500">
+          Cancelar
+        </button>
+        <button id="saveNoteBtn" class="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400">
+          Guardar nota
+        </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const monthYearEl = document.getElementById("monthYear");
+    const calendarGrid = document.getElementById("calendarGrid");
+    const selectedDateTitle = document.getElementById("selectedDateTitle");
+    const selectedDateInfo = document.getElementById("selectedDateInfo");
+    const prevMonthBtn = document.getElementById("prevMonth");
+    const nextMonthBtn = document.getElementById("nextMonth");
+    const todayBtn = document.getElementById("todayBtn");
+    const noteModal = document.getElementById("noteModal");
+    const closeNoteModalBtn = document.getElementById("closeNoteModal");
+    const noteModalDate = document.getElementById("noteModalDate");
+    const noteInput = document.getElementById("noteInput");
+    const noteFeedback = document.getElementById("noteFeedback");
+    const saveNoteBtn = document.getElementById("saveNoteBtn");
+    const deleteNoteBtn = document.getElementById("deleteNoteBtn");
+    const agendaList = document.getElementById("agendaList");
+
+    const today = new Date();
+    let currentYear = today.getFullYear();
+    let currentMonth = today.getMonth();
+    let selectedDate = new Date(today);
+    let activeNoteDate = null;
+    let notesByDate = {};
+
+    const monthFormatter = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" });
+    const fullDateFormatter = new Intl.DateTimeFormat("es-ES", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+    const dbDateFormatter = new Intl.DateTimeFormat("sv-SE");
+
+    function normalizeDate(date) {
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
+    function isSameDate(a, b) {
+      return a.getFullYear() === b.getFullYear() &&
+             a.getMonth() === b.getMonth() &&
+             a.getDate() === b.getDate();
+    }
+
+    function toDbDate(date) {
+      return dbDateFormatter.format(date);
+    }
+
+    function currentMonthKey() {
+      return `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
+    }
+
+    function renderAgendaList() {
+      const entries = Object.entries(notesByDate)
+        .filter(([, note]) => note && note.trim() !== "")
+        .sort(([a], [b]) => a.localeCompare(b));
+
+      if (entries.length === 0) {
+        agendaList.innerHTML = '<p class="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-400">Sin notas para este mes.</p>';
+        return;
+      }
+
+      agendaList.innerHTML = entries.map(([dateStr, note]) => {
+        const dateObj = new Date(`${dateStr}T00:00:00`);
+        const isTodayNote = isSameDate(dateObj, today);
+        const dayNumber = dateObj.getDate();
+        const shortText = note.length > 72 ? `${note.slice(0, 72)}...` : note;
+
+        return `
+          <button
+            type="button"
+            data-note-date="${dateStr}"
+            class="w-full rounded-xl border p-3 text-left transition hover:border-indigo-400 hover:bg-slate-800/80 ${
+              isTodayNote
+                ? "border-emerald-300/80 bg-emerald-500/10 shadow-[0_0_14px_rgba(52,211,153,0.45)]"
+                : "border-slate-800 bg-slate-950/40"
+            }"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-sm font-semibold ${isTodayNote ? "text-emerald-200" : "text-indigo-200"}">
+                Día ${dayNumber} ${isTodayNote ? "• Hoy" : ""}
+              </p>
+            </div>
+            <p class="mt-1 text-xs text-slate-300">${shortText.replace(/</g, "&lt;")}</p>
+          </button>
+        `;
+      }).join("");
+
+      agendaList.querySelectorAll("button[data-note-date]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const dateStr = btn.getAttribute("data-note-date");
+          if (!dateStr) return;
+          const dateObj = new Date(`${dateStr}T00:00:00`);
+          selectedDate = normalizeDate(dateObj);
+          currentYear = selectedDate.getFullYear();
+          currentMonth = selectedDate.getMonth();
+          buildCalendar(currentYear, currentMonth);
+          updateSelectedDatePanel();
+          openNoteModal(dateObj);
+        });
+      });
+    }
+
+    function openNoteModal(dateObj) {
+      activeNoteDate = toDbDate(dateObj);
+      noteModalDate.textContent = fullDateFormatter.format(dateObj);
+      noteInput.value = notesByDate[activeNoteDate] || "";
+      noteFeedback.textContent = "";
+      noteFeedback.className = "mt-2 min-h-5 text-xs text-slate-400";
+      noteModal.classList.remove("hidden");
+      noteModal.classList.add("flex");
+      noteInput.focus();
+    }
+
+    function closeNoteModal() {
+      noteModal.classList.remove("flex");
+      noteModal.classList.add("hidden");
+      activeNoteDate = null;
+    }
+
+    async function fetchNotesForMonth() {
+      const response = await fetch(`notes.php?month=${encodeURIComponent(currentMonthKey())}`);
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || "No se pudieron cargar las notas.");
+      }
+      notesByDate = data.notes || {};
+    }
+
+    async function saveNoteForActiveDate() {
+      if (!activeNoteDate) return;
+
+      const note = noteInput.value.trim();
+      noteFeedback.textContent = "Guardando...";
+      noteFeedback.className = "mt-2 min-h-5 text-xs text-slate-400";
+
+      const response = await fetch("notes.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: activeNoteDate, note })
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || "No se pudo guardar la nota.");
+      }
+
+      if (note) {
+        notesByDate[activeNoteDate] = note;
+      } else {
+        delete notesByDate[activeNoteDate];
+      }
+
+      noteFeedback.textContent = data.message || "Nota guardada";
+      noteFeedback.className = "mt-2 min-h-5 text-xs text-emerald-300";
+      buildCalendar(currentYear, currentMonth);
+      updateSelectedDatePanel();
+      renderAgendaList();
+      setTimeout(closeNoteModal, 250);
+    }
+
+    function updateSelectedDatePanel() {
+      selectedDateTitle.textContent = fullDateFormatter.format(selectedDate);
+
+      const day = selectedDate.getDate();
+      const week = Math.ceil((day + new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1).getDay()) / 7);
+      const selectedKey = toDbDate(selectedDate);
+      const hasNote = Boolean(notesByDate[selectedKey]);
+      selectedDateInfo.textContent = `Día ${day} del mes • Semana ${week} • ${
+        isSameDate(selectedDate, today) ? "Es hoy." : "No es hoy."
+      } ${hasNote ? "• Tiene nota guardada." : ""}`;
+    }
+
+    function buildCalendar(year, month) {
+      calendarGrid.innerHTML = "";
+      monthYearEl.textContent = monthFormatter.format(new Date(year, month, 1));
+
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const startingIndex = (firstDay.getDay() + 6) % 7; // lunes=0
+      const totalDays = lastDay.getDate();
+
+      for (let i = 0; i < startingIndex; i += 1) {
+        const emptyCell = document.createElement("div");
+        emptyCell.className = "h-16 rounded-xl border border-transparent bg-transparent sm:h-20";
+        calendarGrid.appendChild(emptyCell);
+      }
+
+      for (let day = 1; day <= totalDays; day += 1) {
+        const dateObj = new Date(year, month, day);
+        const button = document.createElement("button");
+        const isToday = isSameDate(dateObj, today);
+        const isSelected = isSameDate(dateObj, selectedDate);
+        const dateKey = toDbDate(dateObj);
+        const hasNote = Boolean(notesByDate[dateKey]);
+
+        button.type = "button";
+        button.className = [
+          "group relative h-16 rounded-xl border p-2 text-left transition sm:h-20",
+          "border-slate-800 bg-slate-900 hover:border-indigo-400 hover:bg-slate-800/80",
+          isToday ? "ring-1 ring-emerald-400/70" : "",
+          isSelected ? "border-indigo-400 bg-indigo-500/20" : ""
+        ].join(" ").trim();
+
+        button.innerHTML = `
+          <span class="text-sm font-semibold ${isSelected ? "text-indigo-100" : "text-slate-200"}">${day}</span>
+          <span class="absolute bottom-2 right-2 text-[10px] text-slate-400 group-hover:text-slate-300">${isToday ? "Hoy" : ""}</span>
+          ${hasNote ? '<span class="absolute bottom-2 left-2 h-2 w-2 rounded-full bg-amber-300" title="Tiene nota"></span>' : ""}
+        `;
+
+        button.addEventListener("click", () => {
+          selectedDate = normalizeDate(dateObj);
+          buildCalendar(currentYear, currentMonth);
+          updateSelectedDatePanel();
+          openNoteModal(dateObj);
+        });
+
+        calendarGrid.appendChild(button);
+      }
+    }
+
+    prevMonthBtn.addEventListener("click", async () => {
+      currentMonth -= 1;
+      if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear -= 1;
+      }
+      await fetchNotesForMonth();
+      buildCalendar(currentYear, currentMonth);
+      updateSelectedDatePanel();
+      renderAgendaList();
+    });
+
+    nextMonthBtn.addEventListener("click", async () => {
+      currentMonth += 1;
+      if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear += 1;
+      }
+      await fetchNotesForMonth();
+      buildCalendar(currentYear, currentMonth);
+      updateSelectedDatePanel();
+      renderAgendaList();
+    });
+
+    todayBtn.addEventListener("click", async () => {
+      currentYear = today.getFullYear();
+      currentMonth = today.getMonth();
+      selectedDate = normalizeDate(today);
+      await fetchNotesForMonth();
+      buildCalendar(currentYear, currentMonth);
+      updateSelectedDatePanel();
+      renderAgendaList();
+    });
+
+    closeNoteModalBtn.addEventListener("click", closeNoteModal);
+    noteModal.addEventListener("click", (event) => {
+      if (event.target === noteModal) {
+        closeNoteModal();
+      }
+    });
+    saveNoteBtn.addEventListener("click", async () => {
+      try {
+        await saveNoteForActiveDate();
+      } catch (error) {
+        noteFeedback.textContent = error.message;
+        noteFeedback.className = "mt-2 min-h-5 text-xs text-rose-300";
+      }
+    });
+    deleteNoteBtn.addEventListener("click", async () => {
+      const shouldDelete = window.confirm("¿Seguro que quieres borrar esta nota?");
+      if (!shouldDelete) {
+        return;
+      }
+      noteInput.value = "";
+      try {
+        await saveNoteForActiveDate();
+      } catch (error) {
+        noteFeedback.textContent = error.message;
+        noteFeedback.className = "mt-2 min-h-5 text-xs text-rose-300";
+      }
+    });
+
+    noteInput.addEventListener("keydown", async (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        try {
+          await saveNoteForActiveDate();
+        } catch (error) {
+          noteFeedback.textContent = error.message;
+          noteFeedback.className = "mt-2 min-h-5 text-xs text-rose-300";
+        }
+      }
+    });
+
+    (async function initCalendar() {
+      try {
+        await fetchNotesForMonth();
+      } catch (error) {
+        console.error(error);
+      }
+      buildCalendar(currentYear, currentMonth);
+      updateSelectedDatePanel();
+      renderAgendaList();
+    })();
+  </script>
+</body>
+</html>
