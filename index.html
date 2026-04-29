@@ -16,6 +16,45 @@
       }
     };
   </script>
+  <style>
+    /* Scroll fino y discreto alineado con slate / indigo de la UI */
+    .scrollbar-app {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(99, 102, 241, 0.45) rgba(15, 23, 42, 0.5);
+    }
+
+    .scrollbar-app::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+
+    .scrollbar-app::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.45);
+      border-radius: 9999px;
+    }
+
+    .scrollbar-app::-webkit-scrollbar-thumb {
+      background: linear-gradient(
+        180deg,
+        rgba(99, 102, 241, 0.4),
+        rgba(79, 70, 229, 0.3)
+      );
+      border-radius: 9999px;
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+    }
+
+    .scrollbar-app::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(
+        180deg,
+        rgba(129, 140, 248, 0.55),
+        rgba(99, 102, 241, 0.45)
+      );
+    }
+
+    .scrollbar-app::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+  </style>
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
   <main class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -56,40 +95,37 @@
         <aside class="mt-6 rounded-2xl border border-slate-800 bg-slate-900/90 p-4 sm:p-5 lg:col-span-4 lg:mt-0">
           <p class="text-xs uppercase tracking-widest text-slate-400">Agenda del mes</p>
           <h3 class="mt-1 text-lg font-semibold text-indigo-200">Notas rápidas</h3>
-          <div id="agendaList" class="mt-4 space-y-2"></div>
+          <div id="agendaList" class="scrollbar-app mt-4 max-h-[min(440px,calc(100vh-9rem))] space-y-2 overflow-y-auto overscroll-contain pr-0.5"></div>
         </aside>
       </div>
     </section>
   </main>
 
   <div id="noteModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 px-4">
-    <div class="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-soft">
-      <h3 class="text-lg font-semibold text-indigo-200">Nota rápida</h3>
+    <div class="scrollbar-app w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-soft">
+      <h3 class="text-lg font-semibold text-indigo-200">Notas del día</h3>
       <p id="noteModalDate" class="mt-1 text-sm text-slate-300"></p>
 
+      <div id="existingNotesList" class="scrollbar-app mt-4 max-h-48 space-y-2 overflow-y-auto overscroll-contain pr-0.5"></div>
+
+      <label for="noteInput" class="mt-4 block text-xs font-medium uppercase tracking-wide text-slate-400">Añadir nota</label>
       <textarea
         id="noteInput"
-        rows="4"
+        rows="3"
         maxlength="1000"
-        class="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-indigo-400"
-        placeholder="Escribe una nota para este día..."
+        class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-indigo-400"
+        placeholder="Escribe una nota nueva..."
       ></textarea>
 
       <p id="noteFeedback" class="mt-2 min-h-5 text-xs text-slate-400"></p>
 
-      <div class="mt-4 flex items-center justify-between gap-2">
-        <button id="deleteNoteBtn" class="inline-flex items-center gap-2 rounded-xl border border-rose-700/70 bg-rose-950/30 px-3 py-2 text-sm text-rose-200 transition hover:border-rose-500 hover:bg-rose-900/40">
-          <span aria-hidden="true">🗑</span>
-          Borrar
-        </button>
-        <div class="flex items-center gap-2">
+      <div class="mt-4 flex items-center justify-end gap-2">
         <button id="closeNoteModal" class="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm transition hover:border-slate-500">
-          Cancelar
+          Cerrar
         </button>
         <button id="saveNoteBtn" class="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400">
-          Guardar nota
+          Añadir nota
         </button>
-        </div>
       </div>
     </div>
   </div>
@@ -108,7 +144,7 @@
     const noteInput = document.getElementById("noteInput");
     const noteFeedback = document.getElementById("noteFeedback");
     const saveNoteBtn = document.getElementById("saveNoteBtn");
-    const deleteNoteBtn = document.getElementById("deleteNoteBtn");
+    const existingNotesList = document.getElementById("existingNotesList");
     const agendaList = document.getElementById("agendaList");
 
     const today = new Date();
@@ -116,6 +152,7 @@
     let currentMonth = today.getMonth();
     let selectedDate = new Date(today);
     let activeNoteDate = null;
+    /** @type {Record<string, Array<{id:number, note_text:string}>>} */
     let notesByDate = {};
 
     const monthFormatter = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" });
@@ -145,45 +182,136 @@
       return `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
     }
 
-    function renderAgendaList() {
-      const entries = Object.entries(notesByDate)
-        .filter(([, note]) => note && note.trim() !== "")
-        .sort(([a], [b]) => a.localeCompare(b));
+    function notesArrayFor(dateStr) {
+      return notesByDate[dateStr] || [];
+    }
 
-      if (entries.length === 0) {
-        agendaList.innerHTML = '<p class="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-400">Sin notas para este mes.</p>';
+    function countNotesFor(dateStr) {
+      return notesArrayFor(dateStr).length;
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function renderExistingNotesList() {
+      if (!existingNotesList) return;
+      const items = activeNoteDate ? notesArrayFor(activeNoteDate) : [];
+      if (items.length === 0) {
+        existingNotesList.innerHTML =
+          '<p class="rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-400">Sin notas en este día. Añade una abajo.</p>';
         return;
       }
 
-      agendaList.innerHTML = entries.map(([dateStr, note]) => {
-        const dateObj = new Date(`${dateStr}T00:00:00`);
-        const isTodayNote = isSameDate(dateObj, today);
-        const dayNumber = dateObj.getDate();
-        const shortText = note.length > 72 ? `${note.slice(0, 72)}...` : note;
-
-        return `
+      existingNotesList.innerHTML = items
+        .map(
+          (n) => `
+        <div class="flex gap-2 rounded-xl border border-slate-700 bg-slate-950/50 p-3">
+          <p class="min-w-0 flex-1 text-xs text-slate-200">${escapeHtml(n.note_text)}</p>
           <button
             type="button"
-            data-note-date="${dateStr}"
-            class="w-full rounded-xl border p-3 text-left transition hover:border-indigo-400 hover:bg-slate-800/80 ${
+            data-delete-note="${n.id}"
+            class="flex-shrink-0 rounded-lg border border-rose-800/70 p-2 text-sm text-rose-200 transition hover:border-rose-500 hover:bg-rose-950/60"
+            title="Eliminar esta nota"
+          >
+            <span aria-hidden="true">🗑</span>
+          </button>
+        </div>
+      `
+        )
+        .join("");
+
+      existingNotesList.querySelectorAll("[data-delete-note]").forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const raw = btn.getAttribute("data-delete-note");
+          const id = raw ? parseInt(raw, 10) : 0;
+          if (Number.isFinite(id)) {
+            handleDeleteNote(id);
+          }
+        });
+      });
+    }
+
+    function renderAgendaList() {
+      const flat = [];
+      Object.entries(notesByDate)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([dateStr, list]) => {
+          (list || []).forEach((n) => {
+            flat.push({ dateStr, id: n.id, note_text: n.note_text });
+          });
+        });
+
+      if (flat.length === 0) {
+        agendaList.innerHTML =
+          '<p class="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-400">Sin notas para este mes.</p>';
+        return;
+      }
+
+      agendaList.innerHTML = flat
+        .map(({ dateStr, id, note_text: note }) => {
+          const dateObj = new Date(`${dateStr}T00:00:00`);
+          const isTodayNote = isSameDate(dateObj, today);
+          const dayNumber = dateObj.getDate();
+          const shortText = note.length > 72 ? `${note.slice(0, 72)}...` : note;
+
+          return `
+          <div
+            role="button"
+            tabindex="0"
+            data-open-date="${dateStr}"
+            class="relative w-full rounded-xl border p-3 text-left transition hover:border-indigo-400 hover:bg-slate-800/80 cursor-pointer select-none ${
               isTodayNote
                 ? "border-emerald-300/80 bg-emerald-500/10 shadow-[0_0_14px_rgba(52,211,153,0.45)]"
                 : "border-slate-800 bg-slate-950/40"
             }"
           >
-            <div class="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              data-agenda-delete="${id}"
+              data-agenda-delete-date="${dateStr}"
+              class="absolute top-3 right-3 z-10 rounded-lg border border-rose-800/70 bg-slate-900/95 p-1.5 text-sm text-rose-200 shadow-sm transition hover:border-rose-500 hover:bg-rose-950/60"
+              title="Eliminar esta nota"
+            >
+              <span aria-hidden="true">🗑</span>
+            </button>
+            <div class="pr-10">
               <p class="text-sm font-semibold ${isTodayNote ? "text-emerald-200" : "text-indigo-200"}">
                 Día ${dayNumber} ${isTodayNote ? "• Hoy" : ""}
               </p>
+              <p class="mt-1 text-xs text-slate-300">${escapeHtml(shortText)}</p>
             </div>
-            <p class="mt-1 text-xs text-slate-300">${shortText.replace(/</g, "&lt;")}</p>
-          </button>
+          </div>
         `;
-      }).join("");
+        })
+        .join("");
 
-      agendaList.querySelectorAll("button[data-note-date]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const dateStr = btn.getAttribute("data-note-date");
+      agendaList.querySelectorAll("[data-agenda-delete]").forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const raw = btn.getAttribute("data-agenda-delete");
+          const id = raw ? parseInt(raw, 10) : 0;
+          handleDeleteNote(id);
+        });
+      });
+
+      agendaList.querySelectorAll("[data-open-date]").forEach((row) => {
+        row.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            row.click();
+          }
+        });
+        row.addEventListener("click", (event) => {
+          if (event.target.closest && event.target.closest("[data-agenda-delete]")) return;
+          const dateStr = row.getAttribute("data-open-date");
           if (!dateStr) return;
           const dateObj = new Date(`${dateStr}T00:00:00`);
           selectedDate = normalizeDate(dateObj);
@@ -199,9 +327,10 @@
     function openNoteModal(dateObj) {
       activeNoteDate = toDbDate(dateObj);
       noteModalDate.textContent = fullDateFormatter.format(dateObj);
-      noteInput.value = notesByDate[activeNoteDate] || "";
+      noteInput.value = "";
       noteFeedback.textContent = "";
       noteFeedback.className = "mt-2 min-h-5 text-xs text-slate-400";
+      renderExistingNotesList();
       noteModal.classList.remove("hidden");
       noteModal.classList.add("flex");
       noteInput.focus();
@@ -219,20 +348,42 @@
       if (!response.ok || !data.ok) {
         throw new Error(data.error || "No se pudieron cargar las notas.");
       }
-      notesByDate = data.notes || {};
+      notesByDate = normalizeMonthNotesPayload(data.notes || {});
     }
 
-    async function saveNoteForActiveDate() {
+    function normalizeMonthNotesPayload(raw) {
+      const result = {};
+      Object.entries(raw).forEach(([dateStr, value]) => {
+        if (!value) return;
+        if (Array.isArray(value)) {
+          result[dateStr] = value.map((item) =>
+            typeof item === "object" && item !== null && "id" in item
+              ? { id: Number(item.id), note_text: item.note_text }
+              : { id: 0, note_text: String(item) }
+          );
+          return;
+        }
+        result[dateStr] = [{ id: 0, note_text: String(value) }];
+      });
+      return result;
+    }
+
+    async function addNoteForActiveDate() {
       if (!activeNoteDate) return;
 
       const note = noteInput.value.trim();
+      if (!note) {
+        noteFeedback.textContent = "Escribe el texto de la nota antes de guardar.";
+        noteFeedback.className = "mt-2 min-h-5 text-xs text-amber-300";
+        return;
+      }
       noteFeedback.textContent = "Guardando...";
       noteFeedback.className = "mt-2 min-h-5 text-xs text-slate-400";
 
       const response = await fetch("notes.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: activeNoteDate, note })
+        body: JSON.stringify({ date: activeNoteDate, note }),
       });
       const data = await response.json();
 
@@ -240,18 +391,63 @@
         throw new Error(data.error || "No se pudo guardar la nota.");
       }
 
-      if (note) {
-        notesByDate[activeNoteDate] = note;
-      } else {
-        delete notesByDate[activeNoteDate];
-      }
+      const newId = data.id;
+      if (!notesByDate[activeNoteDate]) notesByDate[activeNoteDate] = [];
+      notesByDate[activeNoteDate].push({ id: newId, note_text: note });
 
       noteFeedback.textContent = data.message || "Nota guardada";
       noteFeedback.className = "mt-2 min-h-5 text-xs text-emerald-300";
+      noteInput.value = "";
+      renderExistingNotesList();
       buildCalendar(currentYear, currentMonth);
       updateSelectedDatePanel();
       renderAgendaList();
-      setTimeout(closeNoteModal, 250);
+    }
+
+    async function handleDeleteNote(id) {
+      try {
+        await deleteNoteById(id);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (noteModal.classList.contains("flex")) {
+          noteFeedback.textContent = msg;
+          noteFeedback.className = "mt-2 min-h-5 text-xs text-rose-300";
+        } else {
+          window.alert(msg);
+        }
+      }
+    }
+
+    async function deleteNoteById(id) {
+      const shouldDelete = window.confirm("¿Seguro que quieres borrar esta nota?");
+      if (!shouldDelete) return;
+
+      const response = await fetch("notes.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", id }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || "No se pudo borrar la nota.");
+      }
+
+      removeNoteFromState(id);
+
+      renderExistingNotesList();
+      buildCalendar(currentYear, currentMonth);
+      updateSelectedDatePanel();
+      renderAgendaList();
+    }
+
+    function removeNoteFromState(id) {
+      Object.keys(notesByDate).forEach((dateStr) => {
+        notesByDate[dateStr] = notesByDate[dateStr].filter((n) => n.id !== id);
+        if (notesByDate[dateStr].length === 0) {
+          delete notesByDate[dateStr];
+        }
+      });
     }
 
     function updateSelectedDatePanel() {
@@ -260,10 +456,12 @@
       const day = selectedDate.getDate();
       const week = Math.ceil((day + new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1).getDay()) / 7);
       const selectedKey = toDbDate(selectedDate);
-      const hasNote = Boolean(notesByDate[selectedKey]);
+      const nNotes = countNotesFor(selectedKey);
+      const notesLabel =
+        nNotes === 0 ? "" : nNotes === 1 ? "• 1 nota." : `• ${nNotes} notas.`;
       selectedDateInfo.textContent = `Día ${day} del mes • Semana ${week} • ${
         isSameDate(selectedDate, today) ? "Es hoy." : "No es hoy."
-      } ${hasNote ? "• Tiene nota guardada." : ""}`;
+      } ${notesLabel}`;
     }
 
     function buildCalendar(year, month) {
@@ -287,7 +485,8 @@
         const isToday = isSameDate(dateObj, today);
         const isSelected = isSameDate(dateObj, selectedDate);
         const dateKey = toDbDate(dateObj);
-        const hasNote = Boolean(notesByDate[dateKey]);
+        const nNotes = countNotesFor(dateKey);
+        const hasNote = nNotes > 0;
 
         button.type = "button";
         button.className = [
@@ -300,7 +499,13 @@
         button.innerHTML = `
           <span class="text-sm font-semibold ${isSelected ? "text-indigo-100" : "text-slate-200"}">${day}</span>
           <span class="absolute bottom-2 right-2 text-[10px] text-slate-400 group-hover:text-slate-300">${isToday ? "Hoy" : ""}</span>
-          ${hasNote ? '<span class="absolute bottom-2 left-2 h-2 w-2 rounded-full bg-amber-300" title="Tiene nota"></span>' : ""}
+          ${
+            hasNote
+              ? `<span class="absolute bottom-2 left-2 flex items-center gap-0.5" title="${
+                  nNotes
+                } nota(s)">${nNotes > 1 ? `<span class="min-w-[0.875rem] text-center text-[9px] font-bold leading-none text-amber-200">${nNotes}</span>` : ""}<span class="inline-block h-2 w-2 rounded-full bg-amber-300"></span></span>`
+              : ""
+          }
         `;
 
         button.addEventListener("click", () => {
@@ -356,20 +561,7 @@
     });
     saveNoteBtn.addEventListener("click", async () => {
       try {
-        await saveNoteForActiveDate();
-      } catch (error) {
-        noteFeedback.textContent = error.message;
-        noteFeedback.className = "mt-2 min-h-5 text-xs text-rose-300";
-      }
-    });
-    deleteNoteBtn.addEventListener("click", async () => {
-      const shouldDelete = window.confirm("¿Seguro que quieres borrar esta nota?");
-      if (!shouldDelete) {
-        return;
-      }
-      noteInput.value = "";
-      try {
-        await saveNoteForActiveDate();
+        await addNoteForActiveDate();
       } catch (error) {
         noteFeedback.textContent = error.message;
         noteFeedback.className = "mt-2 min-h-5 text-xs text-rose-300";
@@ -379,7 +571,7 @@
     noteInput.addEventListener("keydown", async (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         try {
-          await saveNoteForActiveDate();
+          await addNoteForActiveDate();
         } catch (error) {
           noteFeedback.textContent = error.message;
           noteFeedback.className = "mt-2 min-h-5 text-xs text-rose-300";
