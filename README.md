@@ -3,6 +3,9 @@
 
 Almanaque web moderno e interactivo con **calendario mensual**, **notas rápidas por día (múltiples)** y **agenda lateral**. Las notas se guardan en **MySQL** mediante **PHP (PDO)** y se visualizan al instante en la interfaz.
 
+<img width="1280" height="640" alt="social-almanaque" src="https://github.com/user-attachments/assets/257fb826-e3c7-45df-9b06-3755f4f1946e" />
+
+
 ## Qué incluye
 
 - **Calendario mensual**: navegar mes anterior/siguiente y botón **Hoy**.
